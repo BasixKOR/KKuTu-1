@@ -220,7 +220,7 @@ exports.Client = function (socket, profile, sid) {
     var gp, okg;
 
     if (profile) {
-        my.id = profile.id;
+        my.id = profile.type + '-' + profile.id;
         my.profile = profile;
         /* 망할 셧다운제
         if(Cluster.isMaster){
@@ -296,7 +296,7 @@ exports.Client = function (socket, profile, sid) {
     socket.on('message', function (msg) {
         var data, room = ROOM[my.place];
 
-        JLog.log(`[` + socket.upgradeReq.connection.remoteAddress + `] ` + `Chan @${channel} Msg #${my.id}: ${msg}`);
+        JLog.log(`[` + socket.upgradeReq.connection.remoteAddress + `] ` + `Chan @${channel} Msg #${my.profile.type + '-' + my.id}: ${msg}`);
         try {
             data = JSON.parse(msg);
         } catch (e) {
@@ -304,7 +304,7 @@ exports.Client = function (socket, profile, sid) {
         }
         if (Cluster.isWorker) process.send({
             type: "tail-report",
-            id: my.id,
+            id: my.profile.type + '-' + my.id,
             chan: channel,
             place: my.place,
             msg: data.error ? msg : data
@@ -327,7 +327,7 @@ exports.Client = function (socket, profile, sid) {
     */
     my.getData = function (gaming) {
         var o = {
-            id: my.id,
+            id: my.profile.type + '-' + my.id,
             guest: my.guest,
             game: {
                 ready: my.ready,
@@ -364,7 +364,7 @@ exports.Client = function (socket, profile, sid) {
         var $room = ROOM[my.place];
 
         // 채팅 도배 차단
-        if (type == 'chat' && !my.subPlace && (!$room || !$room.gaming || $room.game.seq.indexOf(my.id) == -1)) {
+        if (type == 'chat' && !my.subPlace && (!$room || !$room.gaming || $room.game.seq.indexOf(my.profile.type + '-' + my.id) === -1)) {
             var stChat = now - my._pubChat;
             if (stChat <= Const.CHAT_SPAM_ADD_DELAY) my.spamChat++;
             else if (stChat >= Const.CHAT_SPAM_CLEAR_DELAY) my.spamChat = 0;
@@ -377,7 +377,7 @@ exports.Client = function (socket, profile, sid) {
                 if (my.blockedChat) {
                     if (stChat < Const.CHAT_BLOCKED_LENGTH) {
                         if (++my.numSpamChat >= Const.CHAT_KICK_BY_SPAM) {
-                            if (Cluster.isWorker) process.send({type: "kick", target: my.id});
+                            if (Cluster.isWorker) process.send({type: "kick", target: my.profile.type + '-' + my.id});
                             return my.socket.close();
                         }
                         return my.send('blocked');
@@ -398,7 +398,7 @@ exports.Client = function (socket, profile, sid) {
                 if (my.blocked) {
                     if (st < Const.BLOCKED_LENGTH) {
                         if (++my.numSpam >= Const.KICK_BY_SPAM) {
-                            if (Cluster.isWorker) process.send({type: "kick", target: my.id});
+                            if (Cluster.isWorker) process.send({type: "kick", target: my.profile.type + '-' + my.id});
                             return my.socket.close();
                         }
                         return my.send('blocked');
@@ -458,7 +458,7 @@ exports.Client = function (socket, profile, sid) {
             my.friends = {};
 
             R.go({result: 200});
-        } else DB.users.findOne(['_id', my.id]).on(function ($user) {
+        } else DB.users.findOne(['_id', my.profile.type + '-' + my.id]).on(function ($user) {
             var first = !$user;
             var black = first ? "" : $user.black;
 
@@ -505,20 +505,20 @@ exports.Client = function (socket, profile, sid) {
         var R = new Lizard.Tail();
 
         if (my.guest) {
-            R.go({id: my.id, prev: 0});
+            R.go({id: my.profile.type + '-' + my.id, prev: 0});
             return R;
         }
-        DB.users.upsert(['_id', my.id]).set(
+        DB.users.upsert(['_id', my.profile.type + '-' + my.id]).set(
             !isNaN(my.money) ? ['money', my.money] : undefined,
             (my.data && !isNaN(my.data.score)) ? ['kkutu', my.data] : undefined,
             box ? ['box', my.box] : undefined,
             equip ? ['equip', my.equip] : undefined,
             friends ? ['friends', my.friends] : undefined
         ).on(function (__res) {
-            DB.redis.getGlobal(my.id).then(function (_res) {
-                DB.redis.putGlobal(my.id, my.data.score).then(function (res) {
-                    JLog.log(`FLUSHED [${my.id}] PTS=${my.data.score} MNY=${my.money}`);
-                    R.go({id: my.id, prev: _res});
+            DB.redis.getGlobal(my.profile.type + '-' + my.id).then(function (_res) {
+                DB.redis.putGlobal(my.profile.type + '-' + my.id, my.data.score).then(function (res) {
+                    JLog.log(`FLUSHED [${my.profile.type + '-' + my.id}] PTS=${my.data.score} MNY=${my.money}`);
+                    R.go({id: my.profile.type + '-' + my.id, prev: _res});
                 });
             });
         });
@@ -539,7 +539,7 @@ exports.Client = function (socket, profile, sid) {
 
         if (my.place) {
             my.send('roomStuck');
-            JLog.warn(`Enter the room ${room.id} in the place ${my.place} by ${my.id}!`);
+            JLog.warn(`Enter the room ${room.id} in the place ${my.place} by ${my.profile.type + '-' + my.id}!`);
             return;
         } else if (room.id) {
             // 이미 있는 방에 들어가기... 여기서 유효성을 검사한다.
@@ -563,7 +563,7 @@ exports.Client = function (socket, profile, sid) {
             if ($room.players.length >= $room.limit + (spec && $room.gaming ? Const.MAX_OBSERVER : 0)) {
                 return my.sendError(429);
             }
-            if ($room.players.indexOf(my.id) != -1) {
+            if ($room.players.indexOf(my.profile.type + '-' + my.id) !== -1) {
                 return my.sendError(409);
             }
             if (Cluster.isMaster) {
@@ -573,7 +573,7 @@ exports.Client = function (socket, profile, sid) {
                 $room = undefined;
             } else {
                 if (!pass && $room) {
-                    if ($room.kicked.indexOf(my.id) != -1) {
+                    if ($room.kicked.indexOf(my.profile.type + '-' + my.id) !== -1) {
                         return my.sendError(406);
                     }
                     if ($room.password != room.password && $room.password) {
@@ -614,7 +614,7 @@ exports.Client = function (socket, profile, sid) {
                 }
                 $room = new exports.Room(room, getFreeChannel());
 
-                process.send({type: "room-new", target: my.id, room: $room.getData()});
+                process.send({type: "room-new", target: my.profile.type + '-' + my.id, room: $room.getData()});
                 ROOM[$room.id] = $room;
                 spec = false;
             }
@@ -629,7 +629,7 @@ exports.Client = function (socket, profile, sid) {
 
         if (my.subPlace) {
             my.pracRoom.go(my);
-            if ($room) my.send('room', {target: my.id, room: $room.getData()});
+            if ($room) my.send('room', {target: my.profile.type + '-' + my.id, room: $room.getData()});
             my.publish('user', my.getData());
             if (!kickVote) return;
         }
@@ -670,7 +670,7 @@ exports.Client = function (socket, profile, sid) {
             for (i in $room.players) {
                 $c = DIC[$room.players[i]];
                 if (!$c) continue;
-                if ($c.id == $room.master) continue;
+                if ($c.profile.type + '-' + $c.id === $room.master) continue;
 
                 $c.kickTimer = setTimeout($c.kickVote, 10000, $c, true);
             }
@@ -705,7 +705,7 @@ exports.Client = function (socket, profile, sid) {
         var $room = ROOM[my.place];
 
         if (!$room) return;
-        if ($room.master == my.id) return;
+        if ($room.master === my.profile.type + '-' + my.id) return;
         if (my.form != "J") return;
 
         my.ready = !my.ready;
@@ -715,7 +715,7 @@ exports.Client = function (socket, profile, sid) {
         var $room = ROOM[my.place];
 
         if (!$room) return;
-        if ($room.master != my.id) return;
+        if ($room.master !== my.profile.type + '-' + my.id) return;
         if ($room.players.length < 2) return my.sendError(411);
 
         $room.ready();
@@ -751,9 +751,9 @@ exports.Client = function (socket, profile, sid) {
 
         if ($room) {
             if (!$room.gaming) {
-                if ($room.master == my.id) {
+                if ($room.master === my.profile.type + '-' + my.id) {
                     $room.set(room);
-                    exports.publish('room', {target: my.id, room: $room.getData(), modify: true}, room.password);
+                    exports.publish('room', {target: my.profile.type + '-' + my.id, room: $room.getData(), modify: true}, room.password);
                 } else {
                     my.sendError(400);
                 }
@@ -818,7 +818,7 @@ exports.Client = function (socket, profile, sid) {
 
             var f = $doc.friends;
 
-            delete f[my.id];
+            delete f[my.profile.type + '-' + my.id];
             DB.users.update(['_id', id]).set(['friends', f]).on();
         });
         delete my.friends[id];
@@ -872,7 +872,7 @@ exports.Room = function (room, channel) {
             pls.push(filterRobot(my.players[i]));
         }
         return {
-            id: my.id,
+            id: my.profile.type + '-' + my.id,
             channel: my.channel,
             title: my.title,
             password: my.password ? true : false,
@@ -900,7 +900,7 @@ exports.Room = function (room, channel) {
             return caller.sendError(429);
         }
         if (my.gaming) {
-            return caller.send('error', {code: 416, target: my.id});
+            return caller.send('error', {code: 416, target: my.profile.type + '-' + my.id});
         }
         if (!my.rule.ai) {
             return caller.sendError(415);
@@ -942,7 +942,7 @@ exports.Room = function (room, channel) {
         return false;
     };
     my.come = function (client) {
-        if (!my.practice) client.place = my.id;
+        if (!my.practice) client.place = my.profile.type + '-' + my.id;
 
         if (my.players.push(client.id) == 1) {
             my.master = client.id;
@@ -953,12 +953,12 @@ exports.Room = function (room, channel) {
             client.cameWhenGaming = false;
             client.form = "J";
 
-            if (!my.practice) process.send({type: "room-come", target: client.id, id: my.id});
+            if (!my.practice) process.send({type: "room-come", target: client.id, id: my.profile.type + '-' + my.id});
             my.export(client.id);
         }
     };
     my.spectate = function (client, password) {
-        if (!my.practice) client.place = my.id;
+        if (!my.practice) client.place = my.profile.type + '-' + my.id;
         var len = my.players.push(client.id);
 
         if (Cluster.isWorker) {
@@ -967,7 +967,7 @@ exports.Room = function (room, channel) {
             client.cameWhenGaming = true;
             client.form = (len > my.limit) ? "O" : "S";
 
-            process.send({type: "room-spectate", target: client.id, id: my.id, pw: password});
+            process.send({type: "room-spectate", target: client.id, id: my.profile.type + '-' + my.id, pw: password});
             my.export(client.id, false, true);
         }
     };
@@ -977,7 +977,7 @@ exports.Room = function (room, channel) {
 
         if (x == -1) {
             client.place = 0;
-            if (my.players.length < 1) delete ROOM[my.id];
+            if (my.players.length < 1) delete ROOM[my.profile.type + '-' + my.id];
             return client.sendError(409);
         }
         my.players.splice(x, 1);
@@ -1017,7 +1017,7 @@ exports.Room = function (room, channel) {
                 my.gaming = false;
                 my.game = {};
             }
-            delete ROOM[my.id];
+            delete ROOM[my.profile.type + '-' + my.id];
         }
         if (my.practice) {
             clearTimeout(my.game.turnTimer);
@@ -1027,7 +1027,7 @@ exports.Room = function (room, channel) {
         if (Cluster.isWorker) {
             if (!my.practice) {
                 client.socket.close();
-                process.send({type: "room-go", target: client.id, id: my.id, removed: !ROOM.hasOwnProperty(my.id)});
+                process.send({type: "room-go", target: client.id, id: my.profile.type + '-' + my.id, removed: !ROOM.hasOwnProperty(my.id)});
             }
             my.export(client.id, kickVote);
         }
@@ -1182,7 +1182,7 @@ exports.Room = function (room, channel) {
             my.export();
             setTimeout(my.roundReady, 2000);
         });
-        my.byMaster('starting', {target: my.id});
+        my.byMaster('starting', {target: my.profile.type + '-' + my.id});
         delete my._avTeam;
         delete my._teams;
     };
@@ -1245,7 +1245,7 @@ exports.Room = function (room, channel) {
         rl = res.length;
 
         for (i in res) {
-            o = DIC[res[i].id];
+            o = DIC[res[i].profile.type + '-' + res[i].id];
             if (pv == res[i].score) {
                 res[i].rank = res[Number(i) - 1].rank;
             } else {

@@ -132,21 +132,21 @@ Server.on('connection', function (socket) {
     }
     MainDB.session.findOne(['_id', key]).limit(['profile', true]).on(function ($body) {
         $c = new KKuTu.Client(socket, $body ? $body.profile : null, key);
-        $c.admin = GLOBAL.ADMIN.indexOf($c.id) != -1;
+        $c.admin = GLOBAL.ADMIN.indexOf($c.profile.type + '-' + $c.id) != -1;
 
-        if (DIC[$c.id]) {
-            DIC[$c.id].send('error', {code: 408});
-            DIC[$c.id].socket.close();
+        if (DIC[$c.profile.type + '-' + $c.id]) {
+            DIC[$c.profile.type + '-' + $c.id].send('error', {code: 408});
+            DIC[$c.profile.type + '-' + $c.id].socket.close();
         }
-        if (DEVELOP && !Const.TESTER.includes($c.id)) {
+        if (DEVELOP && !Const.TESTER.includes($c.profile.type + '-' + $c.id)) {
             $c.send('error', {code: 500});
             $c.socket.close();
             return;
         }
         $c.refresh().then(function (ref) {
             if (ref.result == 200) {
-                DIC[$c.id] = $c;
-                DNAME[($c.profile.title || $c.profile.name).replace(/\s/g, "")] = $c.id;
+                DIC[$c.profile.type + '-' + $c.id] = $c;
+                DNAME[($c.profile.title || $c.profile.name).replace(/\s/g, "")] = $c.profile.type + '-' + $c.id;
 
                 $c.enter(room, reserve.spec, reserve.pass);
                 if ($c.place == room.id) {
@@ -154,7 +154,7 @@ Server.on('connection', function (socket) {
                 } else { // 입장 실패
                     $c.socket.close();
                 }
-                JLog.info(`Chan @${CHAN} New #${$c.id}`);
+                JLog.info(`Chan @${CHAN} New #${$c.profile.type + '-' + $c.id}`);
             } else {
                 $c.send('error', {
                     code: ref.result, message: ref.black
@@ -205,12 +205,12 @@ KKuTu.onClientMessage = function ($c, msg) {
             } else {
                 if ($c.admin) {
                     if (msg.value.charAt() == "#") {
-                        process.send({type: "admin", id: $c.id, value: msg.value});
+                        process.send({type: "admin", id: $c.profile.type + '-' + $c.id, value: msg.value});
                         break;
                     }
                 }
                 if (msg.whisper) {
-                    process.send({type: "tail-report", id: $c.id, chan: CHAN, place: $c.place, msg: msg});
+                    process.send({type: "tail-report", id: $c.profile.type + '-' + $c.id, chan: CHAN, place: $c.place, msg: msg});
                     msg.whisper.split(',').forEach(v => {
                         if (temp = DIC[DNAME[v]]) {
                             temp.send('chat', {
@@ -301,12 +301,12 @@ KKuTu.onClientMessage = function ($c, msg) {
         case 'invite':
             if (!ROOM[$c.place]) return;
             if (ROOM[$c.place].gaming) return;
-            if (ROOM[$c.place].master != $c.id) return;
+            if (ROOM[$c.place].master !== $c.profile.type + '-' + $c.id) return;
             if (!GUEST_PERMISSION.invite) if ($c.guest) return;
             if (msg.target == "AI") {
                 ROOM[$c.place].addAI($c);
             } else {
-                process.send({type: "invite", id: $c.id, place: $c.place, target: msg.target});
+                process.send({type: "invite", id: $c.profile.type + '-' + $c.id, place: $c.place, target: msg.target});
             }
             break;
         case 'inviteRes':
@@ -315,7 +315,7 @@ KKuTu.onClientMessage = function ($c, msg) {
             if (msg.res) {
                 $c.enter({id: msg.from}, false, true);
             } else {
-                if (DIC[temp.master]) DIC[temp.master].send('inviteNo', {target: $c.id});
+                if (DIC[temp.master]) DIC[temp.master].send('inviteNo', {target: $c.profile.type + '-' + $c.id});
             }
             break;
         case 'form':
@@ -339,7 +339,7 @@ KKuTu.onClientMessage = function ($c, msg) {
             if (!ROOM[$c.place]) return;
             if (ROOM[$c.place].gaming) return;
             if (!msg.robot) if ($c.place != temp.place) return;
-            if (ROOM[$c.place].master != $c.id) return;
+            if (ROOM[$c.place].master !== $c.profile.type + '-' + $c.id) return;
             if (ROOM[$c.place].kickVote) return;
             if (!GUEST_PERMISSION.kick) if ($c.guest) return;
 
@@ -349,9 +349,9 @@ KKuTu.onClientMessage = function ($c, msg) {
         case 'kickVote':
             if (!(temp = ROOM[$c.place])) return;
             if (!temp.kickVote) return;
-            if ($c.id == temp.kickVote.target) return;
-            if ($c.id == temp.master) return;
-            if (temp.kickVote.list.indexOf($c.id) != -1) return;
+            if ($c.profile.type + '-' + $c.id === temp.kickVote.target) return;
+            if ($c.profile.type + '-' + $c.id === temp.master) return;
+            if (temp.kickVote.list.indexOf($c.profile.type + '-' + $c.id) !== -1) return;
             if (!GUEST_PERMISSION.kickVote) if ($c.guest) return;
 
             $c.kickVote($c, msg.agree);
@@ -361,7 +361,7 @@ KKuTu.onClientMessage = function ($c, msg) {
             if (!(temp = ROOM[$c.place])) return;
             if (temp.gaming) return;
             if ($c.place != DIC[msg.target].place) return;
-            if (temp.master != $c.id) return;
+            if (temp.master !== $c.profile.type + '-' + $c.id) return;
 
             temp.master = msg.target;
             temp.export();
@@ -381,7 +381,7 @@ KKuTu.onClientMessage = function ($c, msg) {
             if (!msg.target) return;
             if (!ROOM[$c.place]) return;
             if (ROOM[$c.place].gaming) return;
-            if (ROOM[$c.place].master != $c.id) return;
+            if (ROOM[$c.place].master !== $c.profile.type + '-' + $c.id) return;
             if (isNaN(msg.level = Number(msg.level))) return;
             if (msg.level < 0 || msg.level >= 5) return;
             if (isNaN(msg.team = Number(msg.team))) return;
@@ -394,10 +394,10 @@ KKuTu.onClientMessage = function ($c, msg) {
     }
 };
 KKuTu.onClientClosed = function ($c, code) {
-    delete DIC[$c.id];
+    delete DIC[$c.profile.type + '-' + $c.id];
     if ($c.profile) delete DNAME[$c.profile.title || $c.profile.name];
     if ($c.socket) $c.socket.removeAllListeners();
-    KKuTu.publish('disconnRoom', {id: $c.id});
+    KKuTu.publish('disconnRoom', {id: $c.profile.type + '-' + $c.id});
 
-    JLog.alert(`Chan @${CHAN} Exit #${$c.id}`);
+    JLog.alert(`Chan @${CHAN} Exit #${$c.profile.type + '-' + $c.id}`);
 };

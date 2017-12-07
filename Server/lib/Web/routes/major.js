@@ -57,7 +57,7 @@ exports.run = function (Server, page) {
         } else {
             return res.send({error: 400});
         }
-        MainDB.users.findOne(['_id', req.session.profile.id]).limit(['box', true]).on(function ($body) {
+        MainDB.users.findOne(['_id', req.session.profile.type + '-' + req.session.profile.id]).limit(['box', true]).on(function ($body) {
             if (!$body) {
                 res.send({error: 400});
             } else {
@@ -130,7 +130,7 @@ exports.run = function (Server, page) {
         if (req.session.profile && pattern.test(nick)) {
             text = text.slice(0, 100).trim();
             nick = nick.trim();
-            MainDB.users.update(['_id', req.session.profile.id]).set({
+            MainDB.users.update(['_id', req.session.profile.type + '-' + req.session.profile.id]).set({
                 'exordial': text,
                 'nickname': nick
             }).on(function ($res) {
@@ -145,13 +145,14 @@ exports.run = function (Server, page) {
     });
     Server.post("/buy/:id", function (req, res) {
         if (req.session.profile) {
+            var utype = req.session.profile.type;
             var uid = req.session.profile.id;
             var gid = req.params.id;
 
             MainDB.kkutu_shop.findOne(['_id', gid]).on(function ($item) {
                 if (!$item) return res.json({error: 400});
                 if ($item.cost < 0) return res.json({error: 400});
-                MainDB.users.findOne(['_id', uid]).limit(['money', true], ['box', true]).on(function ($user) {
+                MainDB.users.findOne(['_id', utype + '-' + uid]).limit(['money', true], ['box', true]).on(function ($user) {
                     if (!$user) return res.json({error: 400});
                     if (!$user.box) $user.box = {};
                     var postM = $user.money - $item.cost;
@@ -159,7 +160,7 @@ exports.run = function (Server, page) {
                     if (postM < 0) return res.send({result: 400});
 
                     obtain($user, gid, 1, $item.term);
-                    MainDB.users.update(['_id', uid]).set(
+                    MainDB.users.update(['_id', utype + '-' + uid]).set(
                         ['money', postM],
                         ['box', $user.box]
                     ).on(function ($fin) {
@@ -174,12 +175,13 @@ exports.run = function (Server, page) {
     });
     Server.post("/equip/:id", function (req, res) {
         if (!req.session.profile) return res.json({error: 400});
+        var utype = req.session.profile.type;
         var uid = req.session.profile.id;
         var gid = req.params.id;
         var isLeft = req.body.isLeft == "true";
         var now = Date.now() * 0.001;
 
-        MainDB.users.findOne(['_id', uid]).limit(['box', true], ['equip', true]).on(function ($user) {
+        MainDB.users.findOne(['_id', utype + '-' + uid]).limit(['box', true], ['equip', true]).on(function ($user) {
             if (!$user) return res.json({error: 400});
             if (!$user.box) $user.box = {};
             if (!$user.equip) $user.equip = {};
@@ -209,7 +211,7 @@ exports.run = function (Server, page) {
                     consume($user, gid, 1);
                     $user.equip[part] = $item._id;
                 }
-                MainDB.users.update(['_id', uid]).set(['box', $user.box], ['equip', $user.equip]).on(function ($res) {
+9                MainDB.users.update(['_id', utype + '-' + uid]).set(['box', $user.box], ['equip', $user.equip]).on(function ($res) {
                     res.send({result: 200, box: $user.box, equip: $user.equip});
                 });
             });
@@ -217,11 +219,12 @@ exports.run = function (Server, page) {
     });
     Server.post("/payback/:id", function (req, res) {
         if (!req.session.profile) return res.json({error: 400});
+        var utype = req.session.profile.type;
         var uid = req.session.profile.id;
         var gid = req.params.id;
         var isDyn = gid.charAt() == '$';
 
-        MainDB.users.findOne(['_id', uid]).limit(['money', true], ['box', true]).on(function ($user) {
+        MainDB.users.findOne(['_id', utype + '-' + uid]).limit(['money', true], ['box', true]).on(function ($user) {
             if (!$user) return res.json({error: 400});
             if (!$user.box) $user.box = {};
             var q = $user.box[gid];
@@ -232,7 +235,7 @@ exports.run = function (Server, page) {
 
                 consume($user, gid, 1, true);
                 $user.money = Number($user.money) + Math.round(0.2 * Number($item.cost));
-                MainDB.users.update(['_id', uid]).set(['money', $user.money], ['box', $user.box]).on(function ($res) {
+                MainDB.users.update(['_id', utype + '-' + uid]).set(['money', $user.money], ['box', $user.box]).on(function ($res) {
                     res.send({result: 200, box: $user.box, money: $user.money});
                 });
             });
@@ -264,12 +267,13 @@ exports.run = function (Server, page) {
 
     Server.post("/cf", function (req, res) {
         if (!req.session.profile) return res.json({error: 400});
+        var utype = req.session.profile.type;
         var uid = req.session.profile.id;
         var tray = (req.body.tray || "").split('|');
         var i, o;
 
         if (tray.length < 1 || tray.length > 6) return res.json({error: 400});
-        MainDB.users.findOne(['_id', uid]).limit(['money', true], ['box', true]).on(function ($user) {
+        MainDB.users.findOne(['_id', utype + '-' + uid]).limit(['money', true], ['box', true]).on(function ($user) {
             if (!$user) return res.json({error: 400});
             if (!$user.box) $user.box = {};
             var req = {}, word = "", level = 0;
@@ -302,7 +306,7 @@ exports.run = function (Server, page) {
                     gain.push(o);
                 }
                 $user.money -= cfr.cost;
-                MainDB.users.update(['_id', uid]).set(['money', $user.money], ['box', $user.box]).on(function ($res) {
+                MainDB.users.update(['_id', utype + '-' + uid]).set(['money', $user.money], ['box', $user.box]).on(function ($res) {
                     res.send({result: 200, box: $user.box, money: $user.money, gain: gain});
                 });
             });

@@ -256,7 +256,7 @@ Server.get("/login", function (req, res) {
             _age: {min: 20, max: undefined}
         };
         DB.session.upsert(['_id', req.session.id]).set(['profile', JSON.stringify(lp)], ['createdAt', now]).on(function ($res) {
-            DB.users.update(['_id', id]).set(['lastLogin', now]).on();
+            DB.users.update(['_id', req.session.profile.type + '-' + id]).set(['lastLogin', now]).on();
             req.session.admin = true;
             req.session.profile = lp;
             res.redirect("/");
@@ -285,11 +285,11 @@ Server.get("/register", function (req, res) {
 
         $profile.sid = req.session.id;
         req.session.admin = GLOBAL.ADMIN.includes($profile.id);
-        DB.users.findOne(['_id', $profile.id]).on(function ($body) {
+        DB.users.findOne(['_id', $profile.type + '-' + $profile.id]).on(function ($body) {
             if ($body && $body.nickname) {
                 $profile.title = $body.nickname;
             }
-            DB.users.update(['_id', $profile.id]).set(['lastLogin', now]).on();
+            DB.users.update(['_id', $profile.type + '-' + $profile.id]).set(['lastLogin', now]).on();
             DB.session.upsert(['_id', req.session.id]).set({
                 'profile': $profile,
                 'createdAt': now

@@ -23,11 +23,12 @@ exports.run = function (Server, page) {
 
     Server.post("/consume/:id", function (req, res) {
         if (!req.session.profile) return res.json({error: 400});
+        var utype = req.session.profile.type;
         var uid = req.session.profile.id;
         var gid = req.params.id;
         var isDyn = gid.charAt() == '$';
 
-        MainDB.users.findOne(['_id', uid]).on(function ($user) {
+        MainDB.users.findOne(['_id', utype + '-' + uid]).on(function ($user) {
             if (!$user) return res.json({error: 400});
             if (!$user.box) return res.json({error: 400});
             if (!$user.lastLogin) $user.lastLogin = new Date().getTime();
@@ -39,7 +40,7 @@ exports.run = function (Server, page) {
                 if (!$item) return res.json({error: 430});
                 consume($user, gid, 1);
                 output = useItem($user, $item, gid);
-                MainDB.users.update(['_id', uid]).set($user).on(function ($res) {
+                MainDB.users.update(['_id', utype + '-' + uid]).set($user).on(function ($res) {
                     output.result = 200;
                     output.box = $user.box;
                     output.data = $user.kkutu;

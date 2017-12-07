@@ -592,12 +592,25 @@ function runCommand(cmd) {
                 cmd[1] = cmd.slice(1).join(' ');
                 for (i in $data.users) {
                     if (($data.users[i].profile.title || $data.users[i].profile.name) == cmd[1]) {
-                        notice("[" + (++c) + "] " + i);
+                        if ($data.users[i].profile.type === undefined) {
+                            notice("[" + (++c) + "] " + $data.users[i].profile.id);
+                        } else {
+                            notice("[" + (++c) + "] " + $data.users[i].profile.type + '-' + $data.users[i].profile.id);
+                        }
                     }
                 }
                 if (!c) notice(L['error_405']);
             } else {
-                notice(L['myId'] + $data.id);
+                console.log($data);
+                for (i in $data.users) {
+                    if ($data.users[i].profile.id === $data.id) {
+                        if ($data.users[i].profile.type === undefined) {
+                            notice(L['myId'] + $data.users[i].profile.id);
+                        } else {
+                            notice(L['myId'] + $data.users[i].profile.type + '-' + $data.users[i].profile.id);
+                        }
+                    }
+                }
             }
             break;
         default:

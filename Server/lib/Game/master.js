@@ -336,13 +336,13 @@ exports.init = function (_SID, CHAN) {
             }
             MainDB.session.findOne(['_id', key]).limit(['profile', true]).on(function ($body) {
                 $c = new KKuTu.Client(socket, $body ? $body.profile : null, key);
-                $c.admin = GLOBAL.ADMIN.indexOf($c.id) != -1;
+                $c.admin = GLOBAL.ADMIN.indexOf($c.profile.type + '-' + $c.id) !== -1;
 
-                if (DIC[$c.id]) {
-                    DIC[$c.id].sendError(408);
-                    DIC[$c.id].socket.close();
+                if (DIC[$c.profile.type + '-' + $c.id]) {
+                    DIC[$c.profile.type + '-' + $c.id].sendError(408);
+                    DIC[$c.profile.type + '-' + $c.id].socket.close();
                 }
-                if (DEVELOP && !Const.TESTER.includes($c.id)) {
+                if (DEVELOP && !Const.TESTER.includes($c.profile.type + '-' + $c.id)) {
                     $c.sendError(500);
                     $c.socket.close();
                     return;
@@ -366,9 +366,9 @@ exports.init = function (_SID, CHAN) {
                 }
                 $c.refresh().then(function (ref) {
                     if (ref.result == 200) {
-                        DIC[$c.id] = $c;
-                        DNAME[($c.profile.title || $c.profile.name).replace(/\s/g, "")] = $c.id;
-                        MainDB.users.update(['_id', $c.id]).set(['server', SID]).on();
+                        DIC[$c.profile.type + '-' + $c.id] = $c;
+                        DNAME[($c.profile.title || $c.profile.name).replace(/\s/g, "")] = $c.profile.type + '-' + $c.id;
+                        MainDB.users.update(['_id', $c.profile.type + '-' + $c.id]).set(['server', SID]).on();
 
                         if ($c.guest) {
                             $c.socket.send(JSON.stringify({
@@ -386,7 +386,7 @@ exports.init = function (_SID, CHAN) {
                         });
                         $c._error = ref.result;
                         $c.socket.close();
-                        // JLog.info("Black user #" + $c.id);
+                        // JLog.info("Black user #" + $c.profile.type + '-' + $c.id);
                     }
                 });
             });
@@ -400,7 +400,7 @@ exports.init = function (_SID, CHAN) {
 
 function joinNewUser($c) {
     $c.send('welcome', {
-        id: $c.id,
+        id: $c.profile.type + '-' + $c.id,
         guest: $c.guest,
         box: $c.box,
         playTime: $c.data.playTime,
@@ -412,10 +412,10 @@ function joinNewUser($c) {
         test: global.test,
         caj: $c._checkAjae ? true : false
     });
-    narrateFriends($c.id, $c.friends, "on");
+    narrateFriends($c.profile.type + '-' + $c.id, $c.friends, "on");
     KKuTu.publish('conn', {user: $c.getData()});
 
-    JLog.info("New user #" + $c.id);
+    JLog.info("New user #" + $c.profile.type + '-' + $c.id);
 }
 
 KKuTu.onClientMessage = function ($c, msg) {
@@ -469,9 +469,9 @@ function processClientRequest($c, msg) {
             }
             msg.value = msg.value.substr(0, 200);
             if ($c.admin) {
-                if (!processAdmin($c.id, msg.value)) break;
+                if (!processAdmin($c.profile.type + '-' + $c.id, msg.value)) break;
             }
-            checkTailUser($c.id, $c.place, msg);
+            checkTailUser($c.profile.type + '-' + $c.id, $c.place, msg);
             if (msg.whisper) {
                 msg.whisper.split(',').forEach(v => {
                     if (temp = DIC[DNAME[v]]) {
@@ -491,26 +491,26 @@ function processClientRequest($c, msg) {
         case 'friendAdd':
             if (!msg.target) return;
             if ($c.guest) return;
-            if ($c.id == msg.target) return;
+            if ($c.profile.type + '-' + $c.id === msg.target) return;
             if (Object.keys($c.friends).length >= 100) return $c.sendError(452);
             if (temp = DIC[msg.target]) {
                 if (temp.guest) return $c.sendError(453);
                 if ($c._friend) return $c.sendError(454);
                 $c._friend = temp.id;
-                temp.send('friendAdd', {from: $c.id});
+                temp.send('friendAdd', {from: $c.profile.type + '-' + $c.id});
             } else {
                 $c.sendError(450);
             }
             break;
         case 'friendAddRes':
             if (!(temp = DIC[msg.from])) return;
-            if (temp._friend != $c.id) return;
+            if (temp._friend !== $c.profile.type + '-' + $c.id) return;
             if (msg.res) {
                 // $c와 temp가 친구가 되었다.
                 $c.addFriend(temp.id);
-                temp.addFriend($c.id);
+                temp.addFriend($c.profile.type + '-' + $c.id);
             }
-            temp.send('friendAddRes', {target: $c.id, res: msg.res});
+            temp.send('friendAddRes', {target: $c.profile.type + '-' + $c.id, res: msg.res});
             delete temp._friend;
             break;
         case 'friendEdit':
@@ -573,7 +573,7 @@ function processClientRequest($c, msg) {
             if (msg.res) {
                 $c.enter({id: $c._invited}, false, true);
             } else {
-                if (DIC[temp.master]) DIC[temp.master].send('inviteNo', {target: $c.id});
+                if (DIC[temp.master]) DIC[temp.master].send('inviteNo', {target: $c.profile.type + '-' + $c.id});
             }
             delete $c._invited;
             break;
@@ -589,7 +589,7 @@ function processClientRequest($c, msg) {
             break;
         */
         case 'test':
-            checkTailUser($c.id, $c.place, msg);
+            checkTailUser($c.profile.type + '-' + $c.id, $c.place, msg);
             break;
         default:
             break;
@@ -597,12 +597,12 @@ function processClientRequest($c, msg) {
 }
 
 KKuTu.onClientClosed = function ($c, code) {
-    delete DIC[$c.id];
-    if ($c._error != 409) MainDB.users.update(['_id', $c.id]).set(['server', ""]).on();
+    delete DIC[$c.profile.type + '-' + $c.id];
+    if ($c._error != 409) MainDB.users.update(['_id', $c.profile.type + '-' + $c.id]).set(['server', ""]).on();
     if ($c.profile) delete DNAME[$c.profile.title || $c.profile.name];
     if ($c.socket) $c.socket.removeAllListeners();
-    if ($c.friends) narrateFriends($c.id, $c.friends, "off");
-    KKuTu.publish('disconn', {id: $c.id});
+    if ($c.friends) narrateFriends($c.profile.type + '-' + $c.id, $c.friends, "off");
+    KKuTu.publish('disconn', {id: $c.profile.type + '-' + $c.id});
 
-    JLog.alert("Exit #" + $c.id);
+    JLog.alert("Exit #" + $c.profile.type + '-' + $c.id);
 };
