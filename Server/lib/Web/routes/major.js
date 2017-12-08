@@ -211,7 +211,7 @@ exports.run = function (Server, page) {
                     consume($user, gid, 1);
                     $user.equip[part] = $item._id;
                 }
-9                MainDB.users.update(['_id', utype + '-' + uid]).set(['box', $user.box], ['equip', $user.equip]).on(function ($res) {
+                MainDB.users.update(['_id', utype + '-' + uid]).set(['box', $user.box], ['equip', $user.equip]).on(function ($res) {
                     res.send({result: 200, box: $user.box, equip: $user.equip});
                 });
             });
